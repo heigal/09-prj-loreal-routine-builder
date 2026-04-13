@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="cloudflare-worker-url"
+      content="https://lorealroutine.hgalvan2025.workers.dev"
+    />
     <title>L'Oréal | Smart Routine &amp; Product Advisor</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&display=swap"
@@ -100,7 +104,7 @@
       </footer>
     </div>
 
-    <!-- secrets.js stores the public Worker URL (no API key in browser code) -->
+    <!-- Optional: local override for Worker URL (no API key in browser code) -->
     <script src="secrets.js"></script>
     <script src="script.js"></script>
   </body>

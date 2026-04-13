@@ -13,11 +13,29 @@ const SELECTED_PRODUCTS_STORAGE_KEY = "selectedProductIds";
 const DEFAULT_CLOUDFLARE_WORKER_URL =
   "https://lorealroutine.hgalvan2025.workers.dev";
 
+/* Check configuration sources in order: runtime config, meta tag, then fallback */
+function resolveConfiguredWorkerUrl() {
+  const runtimeUrl = window.CLOUDFLARE_WORKER_URL;
+
+  if (typeof runtimeUrl === "string" && runtimeUrl.trim()) {
+    return runtimeUrl.trim();
+  }
+
+  const workerMeta = document.querySelector(
+    'meta[name="cloudflare-worker-url"]',
+  );
+  const metaUrl = workerMeta?.content?.trim();
+
+  if (metaUrl) {
+    return metaUrl;
+  }
+
+  return DEFAULT_CLOUDFLARE_WORKER_URL;
+}
+
 /* Build a safe Worker URL (adds https:// if missing) */
 function getWorkerUrl() {
-  const configuredUrl = (
-    window.CLOUDFLARE_WORKER_URL || DEFAULT_CLOUDFLARE_WORKER_URL
-  ).trim();
+  const configuredUrl = resolveConfiguredWorkerUrl();
 
   if (!configuredUrl) {
     return "";
@@ -403,7 +421,16 @@ chatForm.addEventListener("submit", async (e) => {
 
 /* Load products once so selection can work across category changes */
 (async function initializeApp() {
-  allProducts = await loadProducts();
-  restoreSelectedProductsFromStorage();
-  renderSelectedProductsList();
+  try {
+    allProducts = await loadProducts();
+    restoreSelectedProductsFromStorage();
+    renderSelectedProductsList();
+  } catch (error) {
+    productsContainer.innerHTML = `
+      <div class="placeholder-message">
+        Could not load products. Please refresh and try again.
+      </div>
+    `;
+    addChatMessage("assistant", `Error: ${error.message}`);
+  }
 })();
