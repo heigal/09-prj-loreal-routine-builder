@@ -10,7 +10,24 @@ const clearSelectedProductsBtn = document.getElementById(
 );
 
 const SELECTED_PRODUCTS_STORAGE_KEY = "selectedProductIds";
-const WORKER_URL = window.CLOUDFLARE_WORKER_URL || "";
+
+/* Build a safe Worker URL (adds https:// if missing) */
+function getWorkerUrl() {
+  const configuredUrl = (window.CLOUDFLARE_WORKER_URL || "").trim();
+
+  if (!configuredUrl) {
+    return "";
+  }
+
+  if (
+    configuredUrl.startsWith("http://") ||
+    configuredUrl.startsWith("https://")
+  ) {
+    return configuredUrl;
+  }
+
+  return `https://${configuredUrl}`;
+}
 
 /* Keep selected product IDs and product details in memory while user browses categories */
 const selectedProductIds = new Set();
@@ -182,13 +199,15 @@ function addChatMessage(role, message) {
 
 /* Reusable helper to call OpenAI with a messages array */
 async function requestOpenAI(messages) {
-  if (!WORKER_URL) {
+  const workerUrl = getWorkerUrl();
+
+  if (!workerUrl) {
     throw new Error(
       "Missing Worker URL. Add CLOUDFLARE_WORKER_URL in secrets.js.",
     );
   }
 
-  const response = await fetch(WORKER_URL, {
+  const response = await fetch(workerUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -198,7 +217,13 @@ async function requestOpenAI(messages) {
     }),
   });
 
-  const data = await response.json();
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("Worker returned invalid JSON. Check your Worker code.");
+  }
 
   if (!response.ok) {
     const apiError = data.error?.message || "OpenAI API request failed.";
