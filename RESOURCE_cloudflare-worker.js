@@ -1,3 +1,5 @@
+// Copy this code into your Cloudflare Worker script
+
 export default {
   async fetch(request, env) {
     const corsHeaders = {
@@ -56,9 +58,6 @@ export default {
 
     const data = await response.json();
 
-    return new Response(JSON.stringify(data), {
-      status: response.status,
-      headers: corsHeaders,
-    });
+    return new Response(JSON.stringify(data), { headers: corsHeaders });
   },
 };
