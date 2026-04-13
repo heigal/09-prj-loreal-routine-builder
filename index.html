@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -20,7 +20,17 @@
       <!------- Header / Branding ------->
       <header class="site-header">
         <img src="img/loreal-logo.png" alt="L'Oréal Logo" class="logo" />
+        <p class="site-eyebrow">L'Oréal Paris Beauty Advisor</p>
         <h1 class="site-title">Smart Routine &amp; Product Advisor</h1>
+        <p class="site-subtitle">
+          Curate a polished skincare, haircare, or makeup routine with products
+          chosen just for you.
+        </p>
+        <div class="hero-badges" aria-label="Key features">
+          <span>Curated by category</span>
+          <span>AI routine builder</span>
+          <span>Saved selections</span>
+        </div>
       </header>
 
       <!-- Category Filter -->
@@ -45,6 +55,11 @@
       <!-- Selected Products -->
       <div class="selected-products">
         <h2>Selected Products</h2>
+        <div class="selected-products-actions">
+          <button id="clearSelectedProducts" class="clear-btn" type="button">
+            Clear Selected
+          </button>
+        </div>
         <div id="selectedProductsList"></div>
         <button id="generateRoutine" class="generate-btn">
           <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Routine
@@ -85,7 +100,7 @@
       </footer>
     </div>
 
-    <!-- secrets.js can be removed when using Cloudflare Workers for API requests -->
+    <!-- secrets.js stores the public Worker URL (no API key in browser code) -->
     <script src="secrets.js"></script>
     <script src="script.js"></script>
   </body>
