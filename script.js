@@ -10,10 +10,14 @@ const clearSelectedProductsBtn = document.getElementById(
 );
 
 const SELECTED_PRODUCTS_STORAGE_KEY = "selectedProductIds";
+const DEFAULT_CLOUDFLARE_WORKER_URL =
+  "https://lorealroutine.hgalvan2025.workers.dev";
 
 /* Build a safe Worker URL (adds https:// if missing) */
 function getWorkerUrl() {
-  const configuredUrl = (window.CLOUDFLARE_WORKER_URL || "").trim();
+  const configuredUrl = (
+    window.CLOUDFLARE_WORKER_URL || DEFAULT_CLOUDFLARE_WORKER_URL
+  ).trim();
 
   if (!configuredUrl) {
     return "";
@@ -203,7 +207,7 @@ async function requestOpenAI(messages) {
 
   if (!workerUrl) {
     throw new Error(
-      "Missing Worker URL. Add CLOUDFLARE_WORKER_URL in secrets.js.",
+      "Missing Worker URL. Add window.CLOUDFLARE_WORKER_URL in secrets.js or update DEFAULT_CLOUDFLARE_WORKER_URL in script.js.",
     );
   }
 
