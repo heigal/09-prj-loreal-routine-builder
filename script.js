@@ -16,6 +16,8 @@ let allProducts = [];
 
 /* Storage key for localStorage */
 const SELECTED_PRODUCTS_KEY = "loreal_selected_products";
+const BACKEND_URL =
+  window.OPENAI_BACKEND_URL || "http://localhost:3000/api/chat";
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -64,6 +66,158 @@ async function loadProducts() {
   const response = await fetch("products.json");
   const data = await response.json();
   return data.products;
+}
+
+/* Build a simple local routine when the backend is unavailable */
+function buildLocalRoutine(products) {
+  const orderedProducts = [...products].sort((firstProduct, secondProduct) => {
+    const categoryOrder = {
+      cleanser: 1,
+      moisturizer: 2,
+      suncare: 3,
+      haircare: 4,
+      "hair styling": 5,
+      makeup: 6,
+      fragrance: 7,
+      "hair color": 8,
+      "men's grooming": 9,
+    };
+
+    const firstRank = categoryOrder[firstProduct.category] || 99;
+    const secondRank = categoryOrder[secondProduct.category] || 99;
+    return firstRank - secondRank;
+  });
+
+  const morningSteps = [];
+  const eveningSteps = [];
+
+  orderedProducts.forEach((product) => {
+    const category = product.category.toLowerCase();
+
+    if (category === "cleanser") {
+      morningSteps.push(`Cleanse with ${product.name}.`);
+      eveningSteps.push(
+        `Cleanse again with ${product.name} to remove buildup.`,
+      );
+      return;
+    }
+
+    if (category === "moisturizer") {
+      morningSteps.push(`Apply ${product.name} to lock in hydration.`);
+      eveningSteps.push(
+        `Use ${product.name} after cleansing to support skin overnight.`,
+      );
+      return;
+    }
+
+    if (category === "suncare") {
+      morningSteps.push(
+        `Finish with ${product.name} as your final morning skincare step.`,
+      );
+      return;
+    }
+
+    if (category === "makeup") {
+      morningSteps.push(
+        `Apply ${product.name} after your skincare base is set.`,
+      );
+      return;
+    }
+
+    if (category === "haircare") {
+      morningSteps.push(
+        `Use ${product.name} if you are styling or refreshing hair today.`,
+      );
+      eveningSteps.push(
+        `Use ${product.name} as part of your wash-day or treatment routine.`,
+      );
+      return;
+    }
+
+    if (category === "hair styling") {
+      morningSteps.push(
+        `Style with ${product.name} after hair is clean and dry.`,
+      );
+      return;
+    }
+
+    if (category === "fragrance") {
+      morningSteps.push(`Add ${product.name} as the final finishing touch.`);
+      eveningSteps.push(
+        `Reapply ${product.name} lightly if you want a fresh evening finish.`,
+      );
+      return;
+    }
+
+    if (category === "hair color") {
+      eveningSteps.push(
+        `Follow the instructions for ${product.name} carefully before styling.`,
+      );
+      return;
+    }
+
+    if (category === "men's grooming") {
+      morningSteps.push(
+        `Use ${product.name} as part of your grooming routine.`,
+      );
+      eveningSteps.push(
+        `Repeat ${product.name} if it is meant for daily maintenance.`,
+      );
+    }
+  });
+
+  const productList = orderedProducts
+    .map((product) => `${product.name} (${product.brand})`)
+    .join(", ");
+
+  return [
+    "Personalized Routine",
+    "",
+    `Selected products: ${productList}.`,
+    "",
+    "Morning:",
+    ...(morningSteps.length
+      ? morningSteps.map((step, index) => `${index + 1}. ${step}`)
+      : [
+          "1. Start with the products you selected in a simple cleanse, treat, and protect order.",
+        ]),
+    "",
+    "Evening:",
+    ...(eveningSteps.length
+      ? eveningSteps.map((step, index) => `${index + 1}. ${step}`)
+      : ["1. Focus on cleansing, treatment, and hydration before bed."]),
+    "",
+    "Practical tips:",
+    "1. Use thinner textures before thicker ones.",
+    "2. If a product includes special instructions, follow the label first.",
+    "3. Patch test new skincare when needed.",
+  ].join("\n");
+}
+
+/* Build a simple local answer for follow-up questions */
+function buildLocalAssistantReply(message) {
+  const selectedNames = selectedProducts
+    .map((product) => product.name)
+    .slice(0, 3);
+  const productSummary =
+    selectedNames.length > 0
+      ? selectedNames.join(", ")
+      : "your selected products";
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes("order") || lowerMessage.includes("step")) {
+    return `Use ${productSummary} from lightest to heaviest, then finish with SPF in the morning and fragrance at the end.`;
+  }
+
+  if (lowerMessage.includes("morning")) {
+    return "For the morning, start with cleansing, add treatment or moisturizer, then finish with protection and styling or makeup.";
+  }
+
+  if (lowerMessage.includes("evening")) {
+    return "For the evening, remove buildup first, then use your treatment and moisturizer so the skin or hair can recover overnight.";
+  }
+
+  return `I could not reach the online AI, but based on ${productSummary}, keep the routine simple and follow the label instructions for any product that has special directions.`;
 }
 
 /* Apply category + keyword filters together */
@@ -231,26 +385,37 @@ function updateSelectedProductsList() {
 /* Helper: call OpenAI API through backend proxy */
 async function callOpenAI(messages) {
   // Call our backend proxy instead of OpenAI directly (avoids CORS issues)
-  const backendUrl = "http://localhost:3000/api/chat";
+  const backendUrl = BACKEND_URL;
 
-  const response = await fetch(backendUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages,
-    }),
-  });
+  try {
+    const response = await fetch(backendUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages,
+      }),
+    });
 
-  const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        `Backend error: ${response.status} ${response.statusText}`,
+      );
+    }
 
-  if (data.choices && data.choices[0] && data.choices[0].message) {
-    return data.choices[0].message.content;
+    const data = await response.json();
+
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      return data.choices[0].message.content;
+    }
+
+    throw new Error("Unable to get a valid response from OpenAI API.");
+  } catch (error) {
+    console.error("API Call Error:", error);
+    throw error;
   }
-
-  throw new Error("Unable to get a valid response from OpenAI API.");
 }
 
 /* Generate personalized routine using selected products */
@@ -300,7 +465,26 @@ async function generateRoutine() {
       },
     ];
   } catch (error) {
-    chatWindow.innerHTML = `Error generating routine: ${error.message}`;
+    const routine = buildLocalRoutine(selectedProducts);
+
+    chatWindow.innerHTML = `
+      <div class="routine-response">
+        ${routine.replace(/\n/g, "<br>")}
+      </div>
+      <p style="margin-top: 12px; color: #8b8b8b; font-size: 0.95rem;">
+        The online AI was unavailable, so a local routine was generated instead.
+      </p>
+    `;
+
+    conversationHistory = [
+      systemMessage,
+      userMessage,
+      {
+        role: "assistant",
+        content: routine,
+      },
+    ];
+
     console.error("API Error:", error);
   }
 }
@@ -359,7 +543,7 @@ chatForm.addEventListener("submit", async (e) => {
       content: assistantMessage,
     });
   } catch (error) {
-    addMessageToChat("assistant", `Error: ${error.message}`);
+    addMessageToChat("assistant", buildLocalAssistantReply(message));
     console.error("API Error:", error);
   }
 });
