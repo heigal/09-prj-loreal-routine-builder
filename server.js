@@ -3,6 +3,28 @@
 
 const http = require("http");
 const https = require("https");
+const fs = require("fs");
+const path = require("path");
+
+// Read .env file to get configuration
+function loadEnv() {
+  const envPath = path.join(__dirname, ".env");
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, "utf8");
+    const lines = envContent.split("\n");
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        const [key, value] = trimmed.split("=");
+        if (key) {
+          process.env[key.trim()] = value.trim();
+        }
+      }
+    });
+  }
+}
+
+loadEnv();
 
 // Get API key from environment variable (more secure than hardcoding)
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -10,6 +32,7 @@ const PORT = process.env.PORT || 3000;
 
 if (!OPENAI_API_KEY) {
   console.error("Error: OPENAI_API_KEY environment variable is not set");
+  console.error("Make sure .env file exists with OPENAI_API_KEY defined");
   process.exit(1);
 }
 
