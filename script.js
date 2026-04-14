@@ -11,7 +11,7 @@ const clearSelectedProductsBtn = document.getElementById(
 
 const SELECTED_PRODUCTS_STORAGE_KEY = "selectedProductIds";
 const DEFAULT_CLOUDFLARE_WORKER_URL =
-  "https://lorealroutine.hgalvan2025.workers.dev";
+  "https://long-boat-aeeb.hgalvan2025.workers.dev/";
 
 /* Check configuration sources in order: runtime config, meta tag, then fallback */
 function resolveConfiguredWorkerUrl() {
