@@ -210,6 +210,10 @@ function restoreSelectedProductsFromStorage() {
   }
 }
 
+window.CLOUDFLARE_WORKER_URL = "https://long-boat-aeeb.hgalvan2025.workers.dev/";
+
+
+
 /* Add one message bubble to the chat window */
 function addChatMessage(role, message) {
   const messageBox = document.createElement("div");
