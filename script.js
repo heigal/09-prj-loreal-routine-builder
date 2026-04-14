@@ -1,30 +1,21 @@
 /* Get references to DOM elements */
 const categoryFilter = document.getElementById("categoryFilter");
+const productSearchInput = document.getElementById("productSearch");
 const productsContainer = document.getElementById("productsContainer");
-const chatForm = document.getElementById("chatForm");
-const chatWindow = document.getElementById("chatWindow");
 const selectedProductsList = document.getElementById("selectedProductsList");
 const generateRoutineBtn = document.getElementById("generateRoutine");
-const clearSelectedProductsBtn = document.getElementById(
-  "clearSelectedProducts",
-);
+const clearAllBtn = document.getElementById("clearAllBtn");
+const chatForm = document.getElementById("chatForm");
+const chatWindow = document.getElementById("chatWindow");
+const userInput = document.getElementById("userInput");
 
-const SELECTED_PRODUCTS_STORAGE_KEY = "selectedProductIds";
-const WORKER_URL = window.CLOUDFLARE_WORKER_URL || "";
-
-/* Keep selected product IDs and product details in memory while user browses categories */
-const selectedProductIds = new Set();
-const selectedProductsMap = new Map();
+/* App state */
+let selectedProducts = [];
+let conversationHistory = [];
 let allProducts = [];
 
-/* Save chat history so follow-up questions include prior context */
-let conversationHistory = [
-  {
-    role: "system",
-    content:
-      "You are a beginner-friendly beauty advisor. Keep responses focused on the generated routine and beauty topics: skincare, haircare, makeup, fragrance, and related self-care. If a question is outside these topics, politely decline and guide the user back. Reference prior conversation for follow-up context.",
-  },
-];
+/* Storage key for localStorage */
+const SELECTED_PRODUCTS_KEY = "loreal_selected_products";
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -33,6 +24,41 @@ productsContainer.innerHTML = `
   </div>
 `;
 
+/* Load selected products from localStorage on page load */
+function loadSelectedProductsFromStorage() {
+  const stored = localStorage.getItem(SELECTED_PRODUCTS_KEY);
+  if (!stored) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    if (Array.isArray(parsed)) {
+      selectedProducts = parsed;
+      updateSelectedProductsList();
+    }
+  } catch (error) {
+    console.error("Could not parse stored selected products:", error);
+  }
+}
+
+/* Save selected products to localStorage */
+function saveSelectedProductsToStorage() {
+  localStorage.setItem(SELECTED_PRODUCTS_KEY, JSON.stringify(selectedProducts));
+}
+
+/* Clear all selected products */
+function clearAllSelectedProducts() {
+  selectedProducts = [];
+  updateSelectedProductsList();
+  saveSelectedProductsToStorage();
+
+  const allCards = productsContainer.querySelectorAll(".product-card.selected");
+  allCards.forEach((card) => {
+    card.classList.remove("selected");
+  });
+}
+
 /* Load product data from JSON file */
 async function loadProducts() {
   const response = await fetch("products.json");
@@ -40,341 +66,310 @@ async function loadProducts() {
   return data.products;
 }
 
-/* Create HTML for displaying product cards */
-function displayProducts(products) {
-  if (products.length === 0) {
+/* Apply category + keyword filters together */
+function applyProductFilters() {
+  const selectedCategory = categoryFilter.value;
+  const keyword = productSearchInput.value.trim().toLowerCase();
+
+  const filteredProducts = allProducts.filter((product) => {
+    const matchesCategory =
+      !selectedCategory || product.category === selectedCategory;
+
+    const searchableText =
+      `${product.name} ${product.brand} ${product.category} ${product.description}`.toLowerCase();
+    const matchesKeyword = !keyword || searchableText.includes(keyword);
+
+    return matchesCategory && matchesKeyword;
+  });
+
+  if (filteredProducts.length === 0) {
     productsContainer.innerHTML = `
       <div class="placeholder-message">
-        No products found in this category
+        No matching products found.
       </div>
     `;
     return;
   }
 
-  productsContainer.innerHTML = products
-    .map(
-      (product) => `
-    <div class="product-card ${
-      selectedProductIds.has(product.id) ? "selected" : ""
-    }" data-product-id="${product.id}">
-      <img src="${product.image}" alt="${product.name}">
-      <div class="product-info">
-        <h3>${product.name}</h3>
-        <p>${product.brand}</p>
-        <button
-          type="button"
-          class="description-toggle-btn"
-          aria-expanded="false"
-          aria-controls="product-description-${product.id}"
-        >
-          Show Description
-        </button>
-        <div
-          id="product-description-${product.id}"
-          class="product-description"
-          hidden
-        >
-          ${product.description}
-        </div>
-      </div>
-    </div>
-  `,
-    )
-    .join("");
+  displayProducts(filteredProducts);
 }
 
-/* Show selected products above the Generate Routine button */
-function renderSelectedProductsList() {
-  const selectedProducts = Array.from(selectedProductsMap.values());
+/* Create HTML for displaying product cards */
+function displayProducts(products) {
+  productsContainer.innerHTML = products
+    .map((product) => {
+      const isSelected = selectedProducts.some(
+        (p) => String(p.id) === String(product.id),
+      );
+      const selectedClass = isSelected ? " selected" : "";
 
+      return `
+        <div
+          class="product-card${selectedClass}"
+          data-product-id="${product.id}"
+          data-product-name="${product.name}"
+          data-product-brand="${product.brand}"
+          data-product-category="${product.category}"
+          data-product-description="${product.description.replace(/"/g, "&quot;")}"
+        >
+          <img src="${product.image}" alt="${product.name}">
+          <div class="product-info">
+            <h3>${product.name}</h3>
+            <p>${product.brand}</p>
+            <button class="description-btn" type="button" aria-label="Show product description">
+              <i class="fa-solid fa-circle-info"></i> Details
+            </button>
+          </div>
+          <div class="product-description" hidden>
+            <p>${product.description}</p>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  const productCards = productsContainer.querySelectorAll(".product-card");
+  productCards.forEach((card) => {
+    card.addEventListener("click", handleProductClick);
+  });
+
+  const descriptionButtons =
+    productsContainer.querySelectorAll(".description-btn");
+  descriptionButtons.forEach((button) => {
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const card = button.closest(".product-card");
+      const description = card.querySelector(".product-description");
+      const isHidden = description.hasAttribute("hidden");
+
+      if (isHidden) {
+        description.removeAttribute("hidden");
+        button.classList.add("active");
+      } else {
+        description.setAttribute("hidden", "");
+        button.classList.remove("active");
+      }
+    });
+  });
+}
+
+/* Handle product card clicks for selection */
+function handleProductClick(e) {
+  const card = e.currentTarget;
+
+  const product = {
+    id: card.getAttribute("data-product-id"),
+    name: card.getAttribute("data-product-name"),
+    brand: card.getAttribute("data-product-brand"),
+    category: card.getAttribute("data-product-category"),
+    description: card.getAttribute("data-product-description"),
+  };
+
+  const isSelected = selectedProducts.some(
+    (p) => String(p.id) === String(product.id),
+  );
+
+  if (isSelected) {
+    selectedProducts = selectedProducts.filter(
+      (p) => String(p.id) !== String(product.id),
+    );
+    card.classList.remove("selected");
+  } else {
+    selectedProducts.push(product);
+    card.classList.add("selected");
+  }
+
+  updateSelectedProductsList();
+  saveSelectedProductsToStorage();
+}
+
+/* Update the visual list of selected products */
+function updateSelectedProductsList() {
   if (selectedProducts.length === 0) {
     selectedProductsList.innerHTML =
-      '<p class="selected-placeholder">No products selected yet.</p>';
+      '<p style="color: #999;">No products selected yet</p>';
     return;
   }
 
   selectedProductsList.innerHTML = selectedProducts
     .map(
       (product) => `
-      <div class="selected-product-pill" data-selected-id="${product.id}">
-        <span>${product.name}</span>
-        <button type="button" class="remove-selected-btn" data-remove-id="${product.id}" aria-label="Remove ${product.name}">
-          &times;
-        </button>
-      </div>
-    `,
+        <div class="selected-product-tag">
+          <span>${product.name}</span>
+          <button type="button" class="remove-btn" data-product-id="${product.id}" aria-label="Remove ${product.name}">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      `,
     )
     .join("");
-}
 
-function saveSelectedProductsToStorage() {
-  const selectedIds = Array.from(selectedProductIds);
-  localStorage.setItem(
-    SELECTED_PRODUCTS_STORAGE_KEY,
-    JSON.stringify(selectedIds),
-  );
-}
+  const removeButtons = selectedProductsList.querySelectorAll(".remove-btn");
+  removeButtons.forEach((button) => {
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-function removeSelectedProductById(productId) {
-  selectedProductIds.delete(productId);
-  selectedProductsMap.delete(productId);
+      const productId = button.getAttribute("data-product-id");
+      selectedProducts = selectedProducts.filter(
+        (p) => String(p.id) !== String(productId),
+      );
 
-  const card = productsContainer.querySelector(
-    `[data-product-id="${productId}"]`,
-  );
-  if (card) {
-    card.classList.remove("selected");
-  }
+      const card = productsContainer.querySelector(
+        `.product-card[data-product-id="${productId}"]`,
+      );
+      if (card) {
+        card.classList.remove("selected");
+      }
 
-  saveSelectedProductsToStorage();
-  renderSelectedProductsList();
-}
-
-function clearAllSelectedProducts() {
-  selectedProductIds.clear();
-  selectedProductsMap.clear();
-  saveSelectedProductsToStorage();
-  renderSelectedProductsList();
-
-  document.querySelectorAll(".product-card.selected").forEach((card) => {
-    card.classList.remove("selected");
+      updateSelectedProductsList();
+      saveSelectedProductsToStorage();
+    });
   });
 }
 
-function restoreSelectedProductsFromStorage() {
-  const savedRaw = localStorage.getItem(SELECTED_PRODUCTS_STORAGE_KEY);
-
-  if (!savedRaw) {
-    return;
-  }
-
-  try {
-    const savedIds = JSON.parse(savedRaw);
-
-    if (!Array.isArray(savedIds)) {
-      return;
-    }
-
-    savedIds.forEach((idValue) => {
-      const productId = Number(idValue);
-      const product = allProducts.find((item) => item.id === productId);
-
-      if (!product) {
-        return;
-      }
-
-      selectedProductIds.add(productId);
-      selectedProductsMap.set(productId, product);
-    });
-  } catch {
-    localStorage.removeItem(SELECTED_PRODUCTS_STORAGE_KEY);
-  }
-}
-
-/* Add one message bubble to the chat window */
-function addChatMessage(role, message) {
-  const messageBox = document.createElement("div");
-  messageBox.className = `chat-message ${role}`;
-  messageBox.textContent = message;
-  chatWindow.appendChild(messageBox);
-  chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-
-/* Reusable helper to call OpenAI with a messages array */
-async function requestOpenAI(messages) {
-  if (!WORKER_URL) {
-    throw new Error(
-      "Missing Worker URL. Add CLOUDFLARE_WORKER_URL in secrets.js.",
-    );
-  }
-
-  const response = await fetch(WORKER_URL, {
+/* Helper: call OpenAI API with a messages array */
+async function callOpenAI(messages) {
+  const response = await fetch(OPENAI_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
+      model: "gpt-4o",
       messages,
     }),
   });
 
   const data = await response.json();
 
-  if (!response.ok) {
-    const apiError = data.error?.message || "OpenAI API request failed.";
-    throw new Error(apiError);
+  if (data.choices && data.choices[0] && data.choices[0].message) {
+    return data.choices[0].message.content;
   }
 
-  const content =
-    data.choices?.[0]?.message?.content ??
-    data.output_text ??
-    data.message?.content;
-
-  if (!content) {
-    const unexpectedMessage =
-      data.error?.message || "Unexpected response from the AI service.";
-    throw new Error(unexpectedMessage);
-  }
-
-  return content;
+  throw new Error("Unable to get a valid response from OpenAI API.");
 }
 
-/* Handle card click: select if not selected, unselect if already selected */
-productsContainer.addEventListener("click", (event) => {
-  const descriptionToggleBtn = event.target.closest(".description-toggle-btn");
-
-  if (descriptionToggleBtn) {
-    const isExpanded =
-      descriptionToggleBtn.getAttribute("aria-expanded") === "true";
-    const descriptionId = descriptionToggleBtn.getAttribute("aria-controls");
-    const descriptionPanel = descriptionId
-      ? document.getElementById(descriptionId)
-      : null;
-
-    if (!descriptionPanel) {
-      return;
-    }
-
-    descriptionToggleBtn.setAttribute("aria-expanded", String(!isExpanded));
-    descriptionToggleBtn.textContent = isExpanded
-      ? "Show Description"
-      : "Hide Description";
-    descriptionPanel.hidden = isExpanded;
-    return;
-  }
-
-  const clickedCard = event.target.closest(".product-card");
-
-  if (!clickedCard) {
-    return;
-  }
-
-  const productId = Number(clickedCard.dataset.productId);
-  const product = allProducts.find((item) => item.id === productId);
-
-  if (!product) {
-    return;
-  }
-
-  if (selectedProductIds.has(productId)) {
-    removeSelectedProductById(productId);
-  } else {
-    selectedProductIds.add(productId);
-    selectedProductsMap.set(productId, product);
-    clickedCard.classList.add("selected");
-    saveSelectedProductsToStorage();
-    renderSelectedProductsList();
-  }
-});
-
-/* Remove one selected product from the selected list */
-selectedProductsList.addEventListener("click", (event) => {
-  const removeBtn = event.target.closest(".remove-selected-btn");
-
-  if (!removeBtn) {
-    return;
-  }
-
-  const productId = Number(removeBtn.dataset.removeId);
-  removeSelectedProductById(productId);
-});
-
-/* Clear all selected products */
-clearSelectedProductsBtn.addEventListener("click", () => {
-  clearAllSelectedProducts();
-});
-
-/* Filter and display products when category changes */
-categoryFilter.addEventListener("change", async (e) => {
-  if (allProducts.length === 0) {
-    allProducts = await loadProducts();
-  }
-
-  const selectedCategory = e.target.value;
-
-  /* filter() creates a new array containing only products 
-     where the category matches what the user selected */
-  const filteredProducts = allProducts.filter(
-    (product) => product.category === selectedCategory,
-  );
-
-  displayProducts(filteredProducts);
-});
-
-/* Build prompt with selected products and request a routine from OpenAI */
-generateRoutineBtn.addEventListener("click", async () => {
-  const selectedProducts = Array.from(selectedProductsMap.values());
-
+/* Generate personalized routine using selected products */
+async function generateRoutine() {
   if (selectedProducts.length === 0) {
-    addChatMessage("assistant", "Please select at least one product first.");
+    chatWindow.innerHTML =
+      "Please select products first before generating a routine.";
     return;
   }
 
-  const selectedProductsPayload = selectedProducts.map((product) => ({
-    name: product.name,
-    brand: product.brand,
-    category: product.category,
-    description: product.description,
-  }));
+  chatWindow.innerHTML = "Generating your personalized routine...";
+  conversationHistory = [];
 
-  const routinePrompt = `Create a personalized skincare or beauty routine using only the products in this JSON array:\n${JSON.stringify(
-    selectedProductsPayload,
+  const selectedProductsJson = JSON.stringify(
+    selectedProducts.map((product) => ({
+      name: product.name,
+      brand: product.brand,
+      category: product.category,
+      description: product.description,
+    })),
     null,
     2,
-  )}\n\nFormat the answer as:\n1) Morning\n2) Evening\n3) Tips`;
-
-  /* Reset chat context each time a new routine is generated */
-  conversationHistory = [conversationHistory[0]];
-  conversationHistory.push({
-    role: "user",
-    content: routinePrompt,
-  });
-
-  addChatMessage(
-    "user",
-    "Generate a personalized routine from my selected products.",
   );
-  addChatMessage("assistant", "Building your routine...");
+
+  const systemMessage = {
+    role: "system",
+    content:
+      "You are a beauty advisor. Stay focused on skincare, haircare, makeup, fragrance, and the generated routine.",
+  };
+
+  const userMessage = {
+    role: "user",
+    content: `Create a personalized routine based on these selected products JSON:\n\n${selectedProductsJson}\n\nInclude morning and evening steps, usage order, and practical tips.`,
+  };
 
   try {
-    const routineText = await requestOpenAI(conversationHistory);
-    conversationHistory.push({ role: "assistant", content: routineText });
+    const routine = await callOpenAI([systemMessage, userMessage]);
 
-    chatWindow.innerHTML = "";
-    addChatMessage("assistant", routineText);
+    chatWindow.innerHTML = `<div class="routine-response">${routine.replace(/\n/g, "<br>")}</div>`;
+
+    conversationHistory = [
+      systemMessage,
+      userMessage,
+      {
+        role: "assistant",
+        content: routine,
+      },
+    ];
   } catch (error) {
-    addChatMessage("assistant", `Error: ${error.message}`);
+    chatWindow.innerHTML = `Error generating routine: ${error.message}`;
+    console.error("API Error:", error);
   }
-});
+}
 
-/* Handle follow-up questions by sending full prior conversation history */
+/* Display messages in the chat window */
+function addMessageToChat(role, content) {
+  const messageClass = role === "user" ? "user-message" : "assistant-message";
+  const sender = role === "user" ? "You" : "Assistant";
+  const messageHtml = `<div class="${messageClass}"><strong>${sender}:</strong> ${content.replace(/\n/g, "<br>")}</div>`;
+
+  chatWindow.innerHTML += messageHtml;
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+/* Filter products when category changes */
+categoryFilter.addEventListener("change", applyProductFilters);
+
+/* Live search as the user types */
+productSearchInput.addEventListener("input", applyProductFilters);
+
+/* Click handlers */
+generateRoutineBtn.addEventListener("click", generateRoutine);
+clearAllBtn.addEventListener("click", clearAllSelectedProducts);
+
+/* Handle chat form submission for follow-up questions */
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  const userInput = document.getElementById("userInput");
-  const userMessage = userInput.value.trim();
-
-  if (!userMessage) {
+  const message = userInput.value.trim();
+  if (!message) {
     return;
   }
 
-  addChatMessage("user", userMessage);
   userInput.value = "";
+  addMessageToChat("user", message);
 
-  conversationHistory.push({ role: "user", content: userMessage });
+  if (conversationHistory.length === 0) {
+    conversationHistory.push({
+      role: "system",
+      content:
+        "You are a beauty advisor. Stay focused on skincare, haircare, makeup, fragrance, and the generated routine.",
+    });
+  }
+
+  conversationHistory.push({
+    role: "user",
+    content: message,
+  });
 
   try {
-    const assistantMessage = await requestOpenAI(conversationHistory);
-    conversationHistory.push({ role: "assistant", content: assistantMessage });
-    addChatMessage("assistant", assistantMessage);
+    const assistantMessage = await callOpenAI(conversationHistory);
+    addMessageToChat("assistant", assistantMessage);
+
+    conversationHistory.push({
+      role: "assistant",
+      content: assistantMessage,
+    });
   } catch (error) {
-    addChatMessage("assistant", `Error: ${error.message}`);
+    addMessageToChat("assistant", `Error: ${error.message}`);
+    console.error("API Error:", error);
   }
 });
 
-/* Load products once so selection can work across category changes */
-(async function initializeApp() {
+/* Initialize app state */
+loadSelectedProductsFromStorage();
+updateSelectedProductsList();
+
+/* Initialize products once, then filter in-memory for smooth UX */
+async function initializeProducts() {
   allProducts = await loadProducts();
-  restoreSelectedProductsFromStorage();
-  renderSelectedProductsList();
-})();
+  applyProductFilters();
+}
+
+initializeProducts();
