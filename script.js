@@ -228,13 +228,15 @@ function updateSelectedProductsList() {
   });
 }
 
-/* Helper: call OpenAI API with a messages array */
+/* Helper: call OpenAI API through backend proxy */
 async function callOpenAI(messages) {
-  const response = await fetch(OPENAI_API_URL, {
+  // Call our backend proxy instead of OpenAI directly (avoids CORS issues)
+  const backendUrl = "http://localhost:3000/api/chat";
+
+  const response = await fetch(backendUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
       model: "gpt-4o",
